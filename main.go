@@ -2,6 +2,7 @@
 package main
 
 import (
+	_ "embed"
 	"os"
 
 	"fyne.io/fyne/v2"
@@ -10,9 +11,16 @@ import (
 	"github.com/mamorett/qgif/internal/ui"
 )
 
+// The Linux build is a plain `go build`, so unlike the macOS bundle it carries
+// no icon metadata; without this the window falls back to Fyne's stock logo.
+//
+//go:embed Icon.png
+var appIcon []byte
+
 func main() {
 	a := app.NewWithID("io.github.qgif.qgif")
 	w := a.NewWindow("qGif")
+	w.SetIcon(&fyne.StaticResource{StaticName: "qgif.png", StaticContent: appIcon})
 
 	u := ui.New(a, w)
 

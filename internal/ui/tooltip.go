@@ -35,6 +35,8 @@ type hoverButton struct {
 	tipObj      fyne.CanvasObject
 	lastTap     fyne.Position
 	triggerTime time.Time
+	lastInRel   fyne.Position // cursor inside the widget at MouseIn
+	lastInAbs   fyne.Position // cursor on the canvas at MouseIn
 }
 
 // newHoverButton creates an icon-only button with the given tooltip text.
@@ -99,6 +101,8 @@ func (h *hoverButton) MouseIn(e *desktop.MouseEvent) {
 		fmt.Fprintf(os.Stderr, "DBG hoverButton.MouseIn tip=%q abs=%v\n", h.tip, e.AbsolutePosition)
 	}
 	h.cancelTimer()
+	h.lastInRel = e.Position
+	h.lastInAbs = e.AbsolutePosition
 	pos := e.AbsolutePosition
 	h.timer = time.AfterFunc(tipDelay, func() {
 		fyne.Do(func() {
@@ -147,14 +151,18 @@ func (h *hoverButton) showTip(pos fyne.Position) {
 
 	tip := container.NewWithoutLayout(bg, text)
 
-	// Keep the tip inside the window.
+	// Anchor below the button (never over it: overlays swallow mouse
+	// events, which would create a dead zone on the button itself).
 	max := h.win.Canvas().Size()
-	x, y := pos.X+tipOffsetX, pos.Y+tipOffsetY
+	btnLeft := pos.X - h.lastInRel.X
+	btnTop := pos.Y - h.lastInRel.Y
+	btnBottom := btnTop + h.Size().Height
+	x, y := btnLeft, btnBottom+4
+	if y+size.Height > max.Height-4 {
+		y = btnTop - size.Height - 4 // footer buttons: show above instead
+	}
 	if x+size.Width > max.Width-4 {
 		x = max.Width - size.Width - 4
-	}
-	if y+size.Height > max.Height-4 {
-		y = pos.Y - size.Height - 8
 	}
 	if x < 4 {
 		x = 4

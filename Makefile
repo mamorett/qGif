@@ -15,6 +15,11 @@ ICON_SRC    := $(ICON_NAME)
 # Tools
 FYNE        := $(HOME)/go/bin/fyne
 
+# Icon sizes installed into the hicolor theme (a 512px file in a 48x48 slot is
+# not a valid hicolor icon, even though Qt tolerates it).
+ICON_SIZES  := 16 24 32 48 64 128 256 512
+ICON_PNGS   := $(foreach s,$(ICON_SIZES),$(BUILD_DIR)/icons/$(s)x$(s).png)
+
 # Install paths (Linux)
 INSTALL_BIN  := $(HOME)/bin
 INSTALL_APPS := $(HOME)/.local/share/applications
@@ -30,7 +35,7 @@ OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: all build install install-linux clean test
+.PHONY: all build icons install install-linux clean test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Default target
@@ -64,12 +69,27 @@ else
 endif
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Icon variants (one properly resized PNG per hicolor size slot)
+# ─────────────────────────────────────────────────────────────────────────────
+
+icons: $(ICON_PNGS)
+
+$(BUILD_DIR)/icons/%.png: $(ICON_SRC)
+	@mkdir -p $(dir $@)
+	@if command -v convert >/dev/null 2>&1; then \
+		convert $(ICON_SRC) -strip -resize $(firstword $(subst x, ,$*)) $@; \
+	else \
+		echo "→ convert(1) not found, installing $(@F) unscaled"; \
+		cp $(ICON_SRC) $@; \
+	fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Install
 # ─────────────────────────────────────────────────────────────────────────────
 
 install: install-linux
 
-install-linux: build
+install-linux: build icons
 ifneq ($(OS),linux)
 	$(error install-linux is only supported on Linux)
 endif
@@ -81,9 +101,10 @@ endif
 	install -Dm755 $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_BIN)/$(BINARY_NAME)
 
 	@echo "→ Installing icons…"
-	install -Dm644 $(ICON_SRC) $(INSTALL_ICON)/256x256/apps/$(APP_ID).png
-	install -Dm644 $(ICON_SRC) $(INSTALL_ICON)/128x128/apps/$(APP_ID).png
-	install -Dm644 $(ICON_SRC) $(INSTALL_ICON)/48x48/apps/$(APP_ID).png
+	@for s in $(ICON_SIZES); do \
+		install -Dm644 $(BUILD_DIR)/icons/$${s}x$${s}.png \
+			$(INSTALL_ICON)/$${s}x$${s}/apps/$(APP_ID).png; \
+	done
 
 	@echo "→ Installing desktop entry…"
 	mkdir -p $(INSTALL_APPS)

@@ -6,6 +6,7 @@ Comment=Pick GIF frames and export them as PNG
 Exec=qgif
 TryExec=qgif
 Icon=qgif
+StartupWMClass=qGif
 Terminal=false
 Categories=Graphics;Utility;
 MimeType=image/gif;
