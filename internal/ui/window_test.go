@@ -195,3 +195,25 @@ func TestShiftClickAfterSingleClickIsTheRegressionGuard(t *testing.T) {
 		t.Fatalf("Save must export all 3 frames, got %v", got)
 	}
 }
+
+func TestUnloadResetsState(t *testing.T) {
+	u := newLoadedApp(t, 3)
+	u.lastGifPath = "/tmp/x/sample.gif"
+	u.onCardTap(1, false)
+	u.sel.Toggle(1)
+	u.unload()
+
+	if len(u.frames) != 0 || u.sel != nil || u.current != -1 || u.lastGifPath != "" {
+		t.Fatalf("state not cleared: frames=%d current=%d path=%q", len(u.frames), u.current, u.lastGifPath)
+	}
+	if u.grid.Visible() || !u.empty.Visible() {
+		t.Fatal("expected drop zone back, grid hidden")
+	}
+	if u.status.Text != "No GIF loaded" {
+		t.Fatalf("status = %q", u.status.Text)
+	}
+	if !u.exportBtn.Disabled() {
+		t.Fatal("export must be disabled after unload")
+	}
+	u.unload() // idempotent no-op
+}

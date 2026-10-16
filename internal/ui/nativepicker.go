@@ -39,3 +39,35 @@ func nativeFolderPick(title, startDir string) (dir string, chosen, available boo
 	}
 	return "", false, false, nil
 }
+
+// nativeFilePick asks the OS for a file using the native picker (kdialog on
+// KDE, zenity elsewhere). filter is a space separated glob list such as
+// "*.gif *.GIF". Returns (path, chosen, available, err).
+func nativeFilePick(title, startDir, filter string) (path string, chosen, available bool, err error) {
+	if p, lerr := exec.LookPath("kdialog"); lerr == nil {
+		out, cerr := exec.Command(p, "--title", title, "--getopenfilename", startDir, filter+"|GIF images").Output()
+		if cerr != nil {
+			return "", false, true, cerr
+		}
+		path = strings.TrimSpace(string(out))
+		if path == "" {
+			return "", false, true, nil
+		}
+		return path, true, true, nil
+	}
+	if p, lerr := exec.LookPath("zenity"); lerr == nil {
+		out, cerr := exec.Command(p, "--file-selection",
+			"--title", title,
+			"--file-filter", "GIF images | "+filter,
+			"--filename", filepath.Join(startDir, "")).Output()
+		if cerr != nil {
+			return "", false, true, cerr
+		}
+		path = strings.TrimSpace(string(out))
+		if path == "" {
+			return "", false, true, nil
+		}
+		return path, true, true, nil
+	}
+	return "", false, false, nil
+}

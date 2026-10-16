@@ -58,6 +58,7 @@ type App struct {
 	preview   *Preview
 
 	openBtn         *hoverButton
+	cleanBtn        *hoverButton
 	allBtn          *hoverButton
 	exportBtn       *hoverButton
 	openItem        *fyne.MenuItem
@@ -131,6 +132,8 @@ func New(a fyne.App, w fyne.Window) *App {
 	title := widget.NewLabelWithStyle("qGif", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	u.openBtn = newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w)
+	u.cleanBtn = newHoverButton(theme.DeleteIcon(), "Unload the current GIF (Ctrl/⌘+Shift+W)", u.unload, w)
+	u.cleanBtn.Disable()
 	u.allBtn = newHoverButton(theme.CheckButtonCheckedIcon(), "Select all frames (Ctrl/⌘+A)", u.selectAll, w)
 	noneBtn := newHoverButton(theme.CheckButtonIcon(), "Clear selection (Ctrl/⌘+Shift+A)", u.selectNone, w)
 	invertBtn := newHoverButton(theme.ViewRefreshIcon(), "Invert selection (Ctrl/⌘+I)", u.invert, w)
@@ -142,7 +145,7 @@ func New(a fyne.App, w fyne.Window) *App {
 	header := container.NewHBox(
 		logo, title,
 		layout.NewSpacer(),
-		u.openBtn,
+		u.openBtn, u.cleanBtn,
 		widget.NewSeparator(),
 		u.allBtn, noneBtn, invertBtn,
 		widget.NewSeparator(),
@@ -259,6 +262,26 @@ func (u *App) updateStatus() {
 	}
 }
 
+// unload clears the loaded GIF and returns the app to its empty state.
+func (u *App) unload() {
+	if len(u.frames) == 0 && u.lastGifPath == "" {
+		return
+	}
+	u.frames, u.thumbImgs, u.delays = nil, nil, nil
+	u.sel = nil
+	u.info = gifdec.Info{}
+	u.fileName, u.baseName, u.lastGifPath = "", "", ""
+	u.current, u.lastTapIndex, u.lastTapTime = -1, -1, time.Time{}
+	u.preview.Clear()
+	u.grid.Hide()
+	u.empty.Show()
+	u.status.SetText("No GIF loaded")
+	u.statusDot.Hide()
+	u.w.SetTitle("qGif")
+	u.cleanBtn.Disable()
+	u.updateExportEnabled()
+}
+
 func (u *App) about() {
 	dialog.ShowInformation("About qGif",
 		fmt.Sprintf("qGif %s\nPick GIF frames and export them as PNG.", Version), u.w)
@@ -267,6 +290,30 @@ func (u *App) about() {
 // ---------------------------------------------------------------- open flow
 
 func (u *App) openDialog() {
+	if runtime.GOOS == "linux" {
+		start := "."
+		if u.lastGifPath != "" {
+			start = filepath.Dir(u.lastGifPath)
+		} else if h, err := os.UserHomeDir(); err == nil {
+			start = h
+		}
+		go func() {
+			path, chosen, available, err := nativeFilePick("Open a GIF", start, "*.gif *.GIF")
+			if !available {
+				fyne.Do(u.fyneOpenFlow)
+				return
+			}
+			if err != nil || !chosen {
+				return // cancelled or picker error
+			}
+			fyne.Do(func() { u.startLoad(path) })
+		}()
+		return
+	}
+	u.fyneOpenFlow()
+}
+
+func (u *App) fyneOpenFlow() {
 	d := dialog.NewFileOpen(func(rc fyne.URIReadCloser, err error) {
 		if err != nil {
 			dialog.ShowError(err, u.w)
@@ -359,6 +406,7 @@ func (u *App) startLoad(path string) {
 			u.lastGifPath = path
 			u.current = 0
 			u.lastTapIndex = -1
+			u.cleanBtn.Enable()
 
 			u.empty.Hide()
 			u.grid.Show()
@@ -557,6 +605,9 @@ func (u *App) buildMenus() {
 	u.openItem = fyne.NewMenuItem("Open…", u.openDialog)
 	u.openItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyO, Modifier: mod}
 
+	unloadItem := fyne.NewMenuItem("Unload GIF", u.unload)
+	unloadItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyW, Modifier: mod | fyne.KeyModifierShift}
+
 	u.exportItem = fyne.NewMenuItem("Export to GIF Folder", u.exportFlow)
 	u.exportItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: mod}
 	u.exportItem.Disabled = true
@@ -564,7 +615,7 @@ func (u *App) buildMenus() {
 	exportOther.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: mod | fyne.KeyModifierShift}
 	exportOther.Disabled = true
 	u.exportOtherItem = exportOther
-	u.fileMenu = fyne.NewMenu("File", u.openItem, u.exportItem, exportOther)
+	u.fileMenu = fyne.NewMenu("File", u.openItem, unloadItem, u.exportItem, exportOther)
 
 	all := fyne.NewMenuItem("Select All", u.selectAll)
 	all.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: mod}
@@ -579,6 +630,8 @@ func (u *App) buildMenus() {
 	u.w.SetMainMenu(fyne.NewMainMenu(u.fileMenu, editMenu, helpMenu))
 
 	canvas := u.w.Canvas()
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyW, Modifier: mod | fyne.KeyModifierShift},
+		func(fyne.Shortcut) { u.unload() })
 	canvas.AddShortcut(exportOther.Shortcut, func(fyne.Shortcut) { u.exportToOtherFolderFlow() })
 	canvas.AddShortcut(all.Shortcut, func(fyne.Shortcut) { u.selectAll() })
 	canvas.AddShortcut(none.Shortcut, func(fyne.Shortcut) { u.selectNone() })

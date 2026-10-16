@@ -38,3 +38,5 @@ build/
 fyne-cross/
 *.tar.xz
 qGif.app/
+DECISIONS.md
+PLAN.md
