@@ -1,0 +1,6 @@
+[App]
+Name = "qGif"
+ID = "io.github.qgif.qgif"
+Version = "0.1.0"
+Build = 1
+Icon = "Icon.png"
