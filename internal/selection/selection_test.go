@@ -138,3 +138,17 @@ func TestIndicesAscending(t *testing.T) {
 	}
 	checkCount(t, s)
 }
+
+func TestSetAnchorThenRange(t *testing.T) {
+	s := New(5)
+	s.SetAnchor(1)
+	s.SelectRange(3)
+	if got := s.Indices(); len(got) != 3 || got[0] != 1 || got[2] != 3 {
+		t.Fatalf("expected 1..3, got %v", got)
+	}
+	s.SetAnchor(100) // out of range ignored, anchor stays 1
+	s.SelectRange(0) // additive: 0 added to existing 1..3
+	if got := s.Indices(); len(got) != 4 || got[0] != 0 || got[3] != 3 {
+		t.Fatalf("expected 0..3, got %v", got)
+	}
+}

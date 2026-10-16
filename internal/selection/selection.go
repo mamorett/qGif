@@ -42,6 +42,14 @@ func (s *Set) Toggle(i int) {
 	s.anchor = i
 }
 
+// SetAnchor makes frame i the start of the next Shift+click range. Out of
+// range indices are ignored.
+func (s *Set) SetAnchor(i int) {
+	if i >= 0 && i < len(s.selected) {
+		s.anchor = i
+	}
+}
+
 // SelectRange selects every frame between the anchor and i inclusive, in
 // either direction, adding to the current selection. The anchor is not
 // changed. Without an anchor it behaves like Toggle(i).

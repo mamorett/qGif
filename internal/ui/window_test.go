@@ -180,3 +180,18 @@ func TestCardSelectedAndCurrentStates(t *testing.T) {
 		t.Fatalf("plain card should have no border: w=%v", card.border.StrokeWidth)
 	}
 }
+
+// TestShiftClickAfterSingleClickIsTheRegressionGuard: the natural multi-pick
+// flow (click frame 0, Shift+click frame 2) must select the whole range even
+// though no double-click/toggle set the anchor first.
+func TestShiftClickAfterSingleClickIsTheRegressionGuard(t *testing.T) {
+	u := newLoadedApp(t, 5)
+	u.onCardTap(0, false)
+	u.onCardTap(2, true)
+	if got := u.sel.Indices(); len(got) != 3 || got[0] != 0 || got[2] != 2 {
+		t.Fatalf("expected range 0..2 selected, got %v", got)
+	}
+	if got := u.exportIndices(); len(got) != 3 {
+		t.Fatalf("Save must export all 3 frames, got %v", got)
+	}
+}

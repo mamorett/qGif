@@ -201,7 +201,10 @@ func (u *App) onCardTap(i int, shift bool) {
 		u.current = i
 		u.lastTapIndex = -1 // next click starts fresh
 	} else {
+		// Single click: view this frame and make it the range anchor so a
+		// following Shift+click selects the range from here.
 		u.current = i
+		u.sel.SetAnchor(i)
 		u.lastTapIndex, u.lastTapTime = i, time.Now()
 	}
 	u.preview.ShowFrame(u.frames[i], len(u.frames))

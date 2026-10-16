@@ -25,7 +25,7 @@ qgif file.gif        # or open via the toolbar / Ctrl(Cmd)+O / drag & drop
 4. Toolbar/menu icons show a tooltip on hover.
 5. **Save/Export** (Ctrl/⌘+E) → pick a folder (opens at the GIF's own folder; on Linux this is the native KDE/GTK dialog) → PNGs land there.
 
-Shortcuts: `⌘/Ctrl+O` open, `⌘/Ctrl+E` export, `⌘/Ctrl+A` all, `⌘/Ctrl+Shift+A` none, `⌘/Ctrl+I` invert.
+Shortcuts: `⌘/Ctrl+O` open, `⌘/Ctrl+E` export to GIF folder, `⌘/Ctrl+Shift+E` export to another folder, `⌘/Ctrl+A` all, `⌘/Ctrl+Shift+A` none, `⌘/Ctrl+I` invert.
 
 ## Building
 
@@ -40,18 +40,17 @@ Requires Go ≥ 1.23 and a C toolchain (Fyne uses OpenGL/GLFW through cgo).
 | Windows | Go + MSYS2 `mingw-w64-x86_64-gcc` (native builds only) |
 
 ```sh
-make          # build the app → bin/qgif (default target)
-make run      # build and launch bin/qgif
-make test     # go test ./internal/...
-make package  # fyne package for the current OS (needs `go install fyne.io/tools/cmd/fyne@latest`)
+make          # build → build/qgif (macOS: .app bundle via `fyne package`)
+make test     # go test ./...
+make install  # Linux: ~/bin/qgif + icons + .desktop entry
+make clean
 ```
 
 ### Cross-compiling (Linux host, Docker or Podman)
 
 ```sh
-make cross-linux              # fyne-cross linux -arch=amd64,arm64
-make cross-windows            # fyne-cross windows -arch=amd64,arm64
-make cross-darwin SDK=/path/to/MacOSX.sdk   # needs the macOS SDK (see below)
+fyne-cross linux -arch=amd64,arm64 -app-id io.github.qgif.qgif
+fyne-cross windows -arch=amd64,arm64 -app-id io.github.qgif.qgif
 ```
 
 Linux → Windows and Linux → Linux-arm64 work out of the box. **Linux → macOS

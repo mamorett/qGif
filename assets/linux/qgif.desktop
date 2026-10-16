@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=qGif
+GenericName=GIF frame selector
+Comment=Pick GIF frames and export them as PNG
+Exec=qgif
+TryExec=qgif
+Icon=qgif
+Terminal=false
+Categories=Graphics;Utility;
+MimeType=image/gif;
