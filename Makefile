@@ -9,7 +9,7 @@ MODULE      := github.com/mamorett/qgif
 
 # Paths
 BUILD_DIR   := build
-ICON_NAME   := Icon.png
+ICON_NAME   := icon.png
 ICON_SRC    := $(ICON_NAME)
 
 # Tools
@@ -111,11 +111,18 @@ endif
 	cp assets/linux/$(APP_ID).desktop $(INSTALL_APPS)/$(APP_ID).desktop
 	sed -i "s|^Exec=.*|Exec=$(INSTALL_BIN)/$(BINARY_NAME)|" \
 		$(INSTALL_APPS)/$(APP_ID).desktop
+# TryExec must also be absolute: the GUI session's PATH usually lacks ~/bin,
+# which makes Plasma mark the entry unusable (broken icon, no Pin to Task
+# Manager).
+	sed -i "s|^TryExec=.*|TryExec=$(INSTALL_BIN)/$(BINARY_NAME)|" \
+		$(INSTALL_APPS)/$(APP_ID).desktop
 
 	@echo "→ Refreshing desktop and icon caches…"
 	update-desktop-database $(INSTALL_APPS)/ 2>/dev/null || true
 	gtk-update-icon-cache -f -t $(INSTALL_ICON)/ 2>/dev/null || true
-	kbuildsycoca6 2>/dev/null || kbuildsycoca5 2>/dev/null || true
+	rm -f $(HOME)/.cache/icon-cache.kcache
+	kbuildsycoca6 --noincremental 2>/dev/null || \
+		kbuildsycoca5 --noincremental 2>/dev/null || true
 
 	@echo "✓ Installation complete."
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="qGif" width="400">
+</p>
+
 # qGif
 
 A small desktop app that opens an animated GIF, shows **all frames at once** in a

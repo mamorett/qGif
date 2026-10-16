@@ -14,7 +14,7 @@ import (
 // The Linux build is a plain `go build`, so unlike the macOS bundle it carries
 // no icon metadata; without this the window falls back to Fyne's stock logo.
 //
-//go:embed Icon.png
+//go:embed icon.png
 var appIcon []byte
 
 func main() {
