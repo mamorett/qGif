@@ -57,21 +57,24 @@ type App struct {
 	split     *container.Split
 	preview   *Preview
 
-	openBtn    *hoverButton
-	exportBtn  *hoverButton
-	openItem   *fyne.MenuItem
-	exportItem *fyne.MenuItem
-	fileMenu   *fyne.Menu
+	openBtn         *hoverButton
+	allBtn          *hoverButton
+	exportBtn       *hoverButton
+	openItem        *fyne.MenuItem
+	exportItem      *fyne.MenuItem
+	exportOtherItem *fyne.MenuItem
+	fileMenu        *fyne.Menu
 
 	loading bool
 
-	frames    []gifdec.Frame
-	thumbImgs []*image.RGBA
-	delays    []int
-	sel       *selection.Set
-	info      gifdec.Info
-	fileName  string
-	baseName  string
+	frames      []gifdec.Frame
+	thumbImgs   []*image.RGBA
+	delays      []int
+	sel         *selection.Set
+	info        gifdec.Info
+	fileName    string
+	baseName    string
+	lastGifPath string
 
 	// current is the single-clicked "viewing" frame; exported when nothing
 	// is selected. lastTap* implement double-click detection.
@@ -128,11 +131,11 @@ func New(a fyne.App, w fyne.Window) *App {
 	title := widget.NewLabelWithStyle("qGif", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	u.openBtn = newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w)
-	allBtn := newHoverButton(theme.CheckButtonCheckedIcon(), "Select all frames (Ctrl/⌘+A)", u.selectAll, w)
+	u.allBtn = newHoverButton(theme.CheckButtonCheckedIcon(), "Select all frames (Ctrl/⌘+A)", u.selectAll, w)
 	noneBtn := newHoverButton(theme.CheckButtonIcon(), "Clear selection (Ctrl/⌘+Shift+A)", u.selectNone, w)
 	invertBtn := newHoverButton(theme.ViewRefreshIcon(), "Invert selection (Ctrl/⌘+I)", u.invert, w)
 	u.exportBtn = newHoverButton(theme.DocumentSaveIcon(),
-		"Save selected frames — or the viewed frame when none are selected (Ctrl/⌘+E)", u.exportFlow, w)
+		"Save selected frames — or the viewed frame — as PNGs into the GIF's folder (Ctrl/⌘+E)", u.exportFlow, w)
 	u.exportBtn.Importance = widget.HighImportance
 	u.exportBtn.Disable()
 
@@ -141,7 +144,7 @@ func New(a fyne.App, w fyne.Window) *App {
 		layout.NewSpacer(),
 		u.openBtn,
 		widget.NewSeparator(),
-		allBtn, noneBtn, invertBtn,
+		u.allBtn, noneBtn, invertBtn,
 		widget.NewSeparator(),
 		u.exportBtn,
 	)
@@ -228,9 +231,11 @@ func (u *App) updateExportEnabled() {
 	if enabled {
 		u.exportBtn.Enable()
 		u.exportItem.Disabled = false
+		u.exportOtherItem.Disabled = false
 	} else {
 		u.exportBtn.Disable()
 		u.exportItem.Disabled = true
+		u.exportOtherItem.Disabled = true
 	}
 	u.fileMenu.Refresh()
 }
@@ -348,6 +353,7 @@ func (u *App) startLoad(path string) {
 			u.info = info
 			u.fileName = filepath.Base(path)
 			u.baseName = strings.TrimSuffix(u.fileName, filepath.Ext(u.fileName))
+			u.lastGifPath = path
 			u.current = 0
 			u.lastTapIndex = -1
 
@@ -414,12 +420,64 @@ func (u *App) exportIndices() []int {
 	return nil
 }
 
+// exportFlow is the primary Save action: writes the selected frames (or the
+// viewed frame) straight into the GIF's folder with auto-composed names.
+// No filename is ever asked; existing files trigger an overwrite confirm.
 func (u *App) exportFlow() {
 	indices := u.exportIndices()
 	if len(indices) == 0 {
 		return
 	}
+	u.confirmAndExport(indices, u.exportTargetDir())
+}
 
+// exportToOtherFolderFlow lets the user override the destination folder via
+// the native picker (kdialog/zenity) or Fyne's dialog as last resort.
+func (u *App) exportToOtherFolderFlow() {
+	indices := u.exportIndices()
+	if len(indices) == 0 {
+		return
+	}
+
+	if runtime.GOOS == "linux" {
+		start := u.exportTargetDir()
+		go func() {
+			dir, chosen, available, _ := nativeFolderPick("Choose folder to save frames into", start)
+			if !available {
+				fyne.Do(func() { u.fyneFolderFlow(indices, start) })
+				return
+			}
+			if !chosen {
+				return // cancelled
+			}
+			fyne.Do(func() { u.confirmAndExport(indices, dir) })
+		}()
+		return
+	}
+
+	u.fyneFolderFlow(indices, u.exportTargetDir())
+}
+
+// exportTargetDir is the folder preselected for the export dialog: the
+// directory of the loaded GIF, falling back to the last used folder.
+func (u *App) exportTargetDir() string {
+	if u.lastGifPath != "" {
+		if d := filepath.Dir(u.lastGifPath); d != "" {
+			return d
+		}
+	}
+	if last := u.a.Preferences().StringWithFallback(lastExportDirKey, ""); last != "" {
+		if fi, err := os.Stat(last); err == nil && fi.IsDir() {
+			return last
+		}
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return h
+	}
+	return "."
+}
+
+func (u *App) fyneFolderFlow(indices []int, startDir string) {
 	d := dialog.NewFolderOpen(func(loc fyne.ListableURI, err error) {
 		if err != nil {
 			dialog.ShowError(err, u.w)
@@ -428,32 +486,33 @@ func (u *App) exportFlow() {
 		if loc == nil {
 			return // cancelled
 		}
-		dir := loc.Path()
-		u.a.Preferences().SetString(lastExportDirKey, dir)
-
-		opts := export.Options{Dir: dir, BaseName: u.baseName}
-		if existing := export.Existing(opts, indices, len(u.frames)); len(existing) > 0 {
-			confirm := dialog.NewConfirm("Files exist",
-				fmt.Sprintf("%d files already exist. Overwrite them?", len(existing)),
-				func(yes bool) {
-					opts.Overwrite = yes
-					u.runExport(indices, opts)
-				}, u.w)
-			confirm.Show()
-			return
-		}
-		u.runExport(indices, opts)
+		u.confirmAndExport(indices, loc.Path())
 	}, u.w)
 
-	if last := u.a.Preferences().StringWithFallback(lastExportDirKey, ""); last != "" {
-		if fi, err := os.Stat(last); err == nil && fi.IsDir() {
-			if lu, err := storage.ListerForURI(storage.NewFileURI(last)); err == nil {
-				d.SetLocation(lu)
-			}
+	if fi, err := os.Stat(startDir); err == nil && fi.IsDir() {
+		if lu, err := storage.ListerForURI(storage.NewFileURI(startDir)); err == nil {
+			d.SetLocation(lu)
 		}
 	}
 	d.Resize(fyne.NewSize(700, 500))
 	d.Show()
+}
+
+// confirmAndExport asks about existing files, then writes.
+func (u *App) confirmAndExport(indices []int, dir string) {
+	u.a.Preferences().SetString(lastExportDirKey, dir)
+	opts := export.Options{Dir: dir, BaseName: u.baseName}
+	if existing := export.Existing(opts, indices, len(u.frames)); len(existing) > 0 {
+		confirm := dialog.NewConfirm("Files exist",
+			fmt.Sprintf("%d files already exist. Overwrite them?", len(existing)),
+			func(yes bool) {
+				opts.Overwrite = yes
+				u.runExport(indices, opts)
+			}, u.w)
+		confirm.Show()
+		return
+	}
+	u.runExport(indices, opts)
 }
 
 func (u *App) runExport(indices []int, opts export.Options) {
@@ -495,10 +554,14 @@ func (u *App) buildMenus() {
 	u.openItem = fyne.NewMenuItem("Open…", u.openDialog)
 	u.openItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyO, Modifier: mod}
 
-	u.exportItem = fyne.NewMenuItem("Export…", u.exportFlow)
+	u.exportItem = fyne.NewMenuItem("Export to GIF Folder", u.exportFlow)
 	u.exportItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: mod}
 	u.exportItem.Disabled = true
-	u.fileMenu = fyne.NewMenu("File", u.openItem, u.exportItem)
+	exportOther := fyne.NewMenuItem("Export to Another Folder…", u.exportToOtherFolderFlow)
+	exportOther.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: mod | fyne.KeyModifierShift}
+	exportOther.Disabled = true
+	u.exportOtherItem = exportOther
+	u.fileMenu = fyne.NewMenu("File", u.openItem, u.exportItem, exportOther)
 
 	all := fyne.NewMenuItem("Select All", u.selectAll)
 	all.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: mod}
@@ -513,6 +576,7 @@ func (u *App) buildMenus() {
 	u.w.SetMainMenu(fyne.NewMainMenu(u.fileMenu, editMenu, helpMenu))
 
 	canvas := u.w.Canvas()
+	canvas.AddShortcut(exportOther.Shortcut, func(fyne.Shortcut) { u.exportToOtherFolderFlow() })
 	canvas.AddShortcut(all.Shortcut, func(fyne.Shortcut) { u.selectAll() })
 	canvas.AddShortcut(none.Shortcut, func(fyne.Shortcut) { u.selectNone() })
 	canvas.AddShortcut(inv.Shortcut, func(fyne.Shortcut) { u.invert() })

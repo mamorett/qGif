@@ -23,7 +23,7 @@ qgif file.gif        # or open via the toolbar / Ctrl(Cmd)+O / drag & drop
 2. **Single-click** a frame to view it in the preview — Save then exports that frame.
 3. **Double-click** frames to select them — Save then exports the selection. **Shift+click** drags a range.
 4. Toolbar/menu icons show a tooltip on hover.
-5. **Save/Export** (Ctrl/⌘+E) → choose a folder → PNGs land there.
+5. **Save/Export** (Ctrl/⌘+E) → pick a folder (opens at the GIF's own folder; on Linux this is the native KDE/GTK dialog) → PNGs land there.
 
 Shortcuts: `⌘/Ctrl+O` open, `⌘/Ctrl+E` export, `⌘/Ctrl+A` all, `⌘/Ctrl+Shift+A` none, `⌘/Ctrl+I` invert.
 

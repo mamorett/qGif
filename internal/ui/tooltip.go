@@ -29,10 +29,12 @@ const (
 type hoverButton struct {
 	widget.Button
 
-	win    fyne.Window
-	tip    string
-	timer  *time.Timer
-	tipObj fyne.CanvasObject
+	win         fyne.Window
+	tip         string
+	timer       *time.Timer
+	tipObj      fyne.CanvasObject
+	lastTap     fyne.Position
+	triggerTime time.Time
 }
 
 // newHoverButton creates an icon-only button with the given tooltip text.
@@ -46,11 +48,50 @@ func newHoverButton(icon fyne.Resource, tip string, f func(), win fyne.Window) *
 }
 
 // Tapped hides any visible tooltip immediately so it can never intercept
-// further events or linger over dialogs.
+// further events or linger over dialogs. The real GL driver dispatches
+// MouseDown (not Tapped) to composed widgets, so both paths trigger the
+// same action; a guard prevents double firing from drivers that send both.
 func (h *hoverButton) Tapped(e *fyne.PointEvent) {
+	h.trigger(e)
+}
+
+// MouseDown implements desktop.Mouseable.
+func (h *hoverButton) MouseDown(e *desktop.MouseEvent) {
+	if e.Button != desktop.MouseButtonPrimary {
+		return
+	}
+	if dbgOn {
+		fmt.Fprintf(os.Stderr, "DBG hoverButton.MouseDown tip=%q disabled=%v\n", h.tip, h.Disabled())
+	}
+	abs := e.AbsolutePosition
+	h.trigger(&fyne.PointEvent{Position: e.Position, AbsolutePosition: abs})
+}
+
+// MouseUp implements desktop.Mouseable.
+func (h *hoverButton) MouseUp(*desktop.MouseEvent) {}
+
+func (h *hoverButton) trigger(e *fyne.PointEvent) {
+	if dbgOn {
+		fmt.Fprintf(os.Stderr, "DBG hoverButton.trigger tip=%q disabled=%v\n", h.tip, h.Disabled())
+	}
+	if h.Disabled() || h.triggeredAt(e) {
+		return
+	}
+	h.lastTap = e.Position
+	h.triggerTime = time.Now()
 	h.cancelTimer()
 	h.hideTip()
-	h.Button.Tapped(e)
+	if h.OnTapped != nil {
+		h.OnTapped()
+	}
+}
+
+// triggeredAt guards against a driver delivering both MouseDown and Tapped
+// for the same click on the same object at nearly the same position/time.
+func (h *hoverButton) triggeredAt(e *fyne.PointEvent) bool {
+	return !h.triggerTime.IsZero() &&
+		h.lastTap == e.Position &&
+		time.Since(h.triggerTime) < 50*time.Millisecond
 }
 
 func (h *hoverButton) MouseIn(e *desktop.MouseEvent) {
