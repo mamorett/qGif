@@ -288,8 +288,33 @@ func (u *App) unload() {
 }
 
 func (u *App) about() {
-	dialog.ShowInformation("About qGif",
-		fmt.Sprintf("qGif %s\nPick GIF frames and export them as PNG.", Version), u.w)
+	logo := canvas.NewImageFromResource(fyne.NewStaticResource("logo.png", logoBytes))
+	logo.FillMode = canvas.ImageFillOriginal
+	logo.SetMinSize(fyne.NewSize(96, 96))
+
+	title := widget.NewLabelWithStyle("qGif", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+
+	version := widget.NewLabelWithStyle("v"+Version, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
+
+	desc := widget.NewLabelWithStyle("Pick GIF frames and export them as PNG.", fyne.TextAlignCenter, fyne.TextStyle{})
+	desc.Wrapping = fyne.TextWrapWord
+
+	var dlg *dialog.CustomDialog
+	okBtn := widget.NewButton("OK", func() { dlg.Hide() })
+	okBtn.Importance = widget.HighImportance
+
+	content := container.NewVBox(
+		container.NewCenter(logo),
+		container.NewCenter(title),
+		container.NewCenter(version),
+		container.NewCenter(desc),
+		layout.NewSpacer(),
+		container.NewCenter(okBtn),
+	)
+
+	dlg = dialog.NewCustomWithoutButtons("About qGif", container.NewPadded(content), u.w)
+	dlg.Resize(fyne.NewSize(340, 440))
+	dlg.Show()
 }
 
 // ---------------------------------------------------------------- open flow
