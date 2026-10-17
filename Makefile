@@ -58,15 +58,14 @@ build:
 	mkdir -p $(BUILD_DIR)
 ifeq ($(OS),darwin)
 	@echo "→ Building macOS app bundle…"
-	CGO_ENABLED=1 $(FYNE) package \
-		-os darwin -name $(APP_NAME) -icon $(ICON_NAME) -id $(APP_ID)
-	mv $(APP_NAME).app $(BUILD_DIR)/
+	./bundle_macos.sh
 else ifeq ($(OS),linux)
 	@echo "→ Building Linux binary…"
 	GOOS=linux CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) .
 else
 	$(error Unsupported OS: $(OS))
 endif
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Icon variants (one properly resized PNG per hicolor size slot)
@@ -134,3 +133,5 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(APP_NAME).app
 	rm -f  $(APP_NAME).tar.xz
+	rm -f  $(APP_NAME)-macos.zip
+

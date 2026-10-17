@@ -16,32 +16,31 @@ import (
 const (
 	tipDelay    = 400 * time.Millisecond
 	tipPad      = float32(6)
-	tipOffsetX  = float32(10)
-	tipOffsetY  = float32(16)
 	tipTextSize = float32(12)
 )
 
-// hoverButton is a goKomfy-style icon button with a hover tooltip. It embeds
-// widget.Button by value and calls ExtendBaseWidget on itself, so state
-// changes (Enable/Disable) repaint correctly. Fyne has no built-in tooltip
-// widget, so the tip is drawn as a plain (non-interactive) overlay near the
-// cursor after a short hover delay.
+// hoverButton is an icon button with a hover tooltip. It embeds widget.Button
+// by value and calls ExtendBaseWidget on itself, so state changes (Enable/Disable)
+// repaint correctly.
+//
+// Tooltips are rendered into a dedicated overlay layer in the window's content
+// container rather than Canvas().Overlays() so that they remain strictly visual
+// and never block mouse clicks across the canvas.
 type hoverButton struct {
 	widget.Button
 
-	win         fyne.Window
-	tip         string
-	timer       *time.Timer
-	tipObj      fyne.CanvasObject
-	lastTap     fyne.Position
-	triggerTime time.Time
-	lastInRel   fyne.Position // cursor inside the widget at MouseIn
-	lastInAbs   fyne.Position // cursor on the canvas at MouseIn
+	win       fyne.Window
+	tipLayer  *fyne.Container
+	tip       string
+	timer     *time.Timer
+	tipObj    fyne.CanvasObject
+	lastInRel fyne.Position // cursor inside the widget at MouseIn
+	lastInAbs fyne.Position // cursor on the canvas at MouseIn
 }
 
 // newHoverButton creates an icon-only button with the given tooltip text.
-func newHoverButton(icon fyne.Resource, tip string, f func(), win fyne.Window) *hoverButton {
-	h := &hoverButton{win: win, tip: tip}
+func newHoverButton(icon fyne.Resource, tip string, f func(), win fyne.Window, tipLayer *fyne.Container) *hoverButton {
+	h := &hoverButton{win: win, tipLayer: tipLayer, tip: tip}
 	h.Importance = widget.LowImportance
 	h.Icon = icon
 	h.OnTapped = f
@@ -49,51 +48,22 @@ func newHoverButton(icon fyne.Resource, tip string, f func(), win fyne.Window) *
 	return h
 }
 
-// Tapped hides any visible tooltip immediately so it can never intercept
-// further events or linger over dialogs. The real GL driver dispatches
-// MouseDown (not Tapped) to composed widgets, so both paths trigger the
-// same action; a guard prevents double firing from drivers that send both.
+// newHoverButtonWithText creates a button with text and icon and a hover tooltip.
+func newHoverButtonWithText(text string, icon fyne.Resource, tip string, f func(), win fyne.Window, tipLayer *fyne.Container) *hoverButton {
+	h := &hoverButton{win: win, tipLayer: tipLayer, tip: tip}
+	h.Importance = widget.LowImportance
+	h.Text = text
+	h.Icon = icon
+	h.OnTapped = f
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+// Tapped hides any visible tooltip immediately and dispatches the standard button tap.
 func (h *hoverButton) Tapped(e *fyne.PointEvent) {
-	h.trigger(e)
-}
-
-// MouseDown implements desktop.Mouseable.
-func (h *hoverButton) MouseDown(e *desktop.MouseEvent) {
-	if e.Button != desktop.MouseButtonPrimary {
-		return
-	}
-	if dbgOn {
-		fmt.Fprintf(os.Stderr, "DBG hoverButton.MouseDown tip=%q disabled=%v\n", h.tip, h.Disabled())
-	}
-	abs := e.AbsolutePosition
-	h.trigger(&fyne.PointEvent{Position: e.Position, AbsolutePosition: abs})
-}
-
-// MouseUp implements desktop.Mouseable.
-func (h *hoverButton) MouseUp(*desktop.MouseEvent) {}
-
-func (h *hoverButton) trigger(e *fyne.PointEvent) {
-	if dbgOn {
-		fmt.Fprintf(os.Stderr, "DBG hoverButton.trigger tip=%q disabled=%v\n", h.tip, h.Disabled())
-	}
-	if h.Disabled() || h.triggeredAt(e) {
-		return
-	}
-	h.lastTap = e.Position
-	h.triggerTime = time.Now()
 	h.cancelTimer()
 	h.hideTip()
-	if h.OnTapped != nil {
-		h.OnTapped()
-	}
-}
-
-// triggeredAt guards against a driver delivering both MouseDown and Tapped
-// for the same click on the same object at nearly the same position/time.
-func (h *hoverButton) triggeredAt(e *fyne.PointEvent) bool {
-	return !h.triggerTime.IsZero() &&
-		h.lastTap == e.Position &&
-		time.Since(h.triggerTime) < 50*time.Millisecond
+	h.Button.Tapped(e)
 }
 
 func (h *hoverButton) MouseIn(e *desktop.MouseEvent) {
@@ -122,7 +92,6 @@ func (h *hoverButton) MouseOut() {
 func (h *hoverButton) cancelTimer() {
 	if h.timer != nil {
 		h.timer.Stop()
-		// Do not nil here: the timer callback checks via Stop()'s bool.
 	}
 }
 
@@ -130,7 +99,7 @@ func (h *hoverButton) showTip(pos fyne.Position) {
 	if dbgOn {
 		fmt.Fprintf(os.Stderr, "DBG showTip %q at %v\n", h.tip, pos)
 	}
-	if h.tipObj != nil {
+	if h.tipObj != nil || h.tipLayer == nil {
 		return
 	}
 	text := canvas.NewText(h.tip, theme.Color(theme.ColorNameForeground))
@@ -150,9 +119,9 @@ func (h *hoverButton) showTip(pos fyne.Position) {
 	text.Refresh()
 
 	tip := container.NewWithoutLayout(bg, text)
+	tip.Resize(size)
 
-	// Anchor below the button (never over it: overlays swallow mouse
-	// events, which would create a dead zone on the button itself).
+	// Anchor below the button (or above for footer buttons).
 	max := h.win.Canvas().Size()
 	btnLeft := pos.X - h.lastInRel.X
 	btnTop := pos.Y - h.lastInRel.Y
@@ -173,12 +142,16 @@ func (h *hoverButton) showTip(pos fyne.Position) {
 	tip.Move(fyne.NewPos(x, y))
 
 	h.tipObj = tip
-	h.win.Canvas().Overlays().Add(tip)
+	h.tipLayer.Objects = []fyne.CanvasObject{tip}
+	h.tipLayer.Refresh()
 }
 
 func (h *hoverButton) hideTip() {
 	if h.tipObj != nil {
-		h.win.Canvas().Overlays().Remove(h.tipObj)
+		if h.tipLayer != nil {
+			h.tipLayer.Objects = nil
+			h.tipLayer.Refresh()
+		}
 		h.tipObj = nil
 	}
 }

@@ -1,6 +1,6 @@
-[App]
+[Details]
+Icon = "icon.png"
 Name = "qGif"
-ID = "io.github.qgif.qgif"
+ID = "io.github.mamorett.qgif"
 Version = "0.1.0"
 Build = 1
-Icon = "icon.png"

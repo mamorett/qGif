@@ -131,22 +131,26 @@ func TestHoverTooltipShowsAndHides(t *testing.T) {
 	btn := u.openBtn
 
 	btn.showTip(fyne.NewPos(10, 10))
-	if u.w.Canvas().Overlays().Top() == nil {
-		t.Fatal("tooltip overlay not shown")
+	if len(u.tooltipLayer.Objects) == 0 {
+		t.Fatal("tooltip not shown in tooltipLayer")
+	}
+	if u.w.Canvas().Overlays().Top() != nil {
+		t.Fatal("tooltip should not be placed in Canvas().Overlays() to avoid blocking clicks")
 	}
 	btn.hideTip()
-	if u.w.Canvas().Overlays().Top() != nil {
-		t.Fatal("tooltip overlay not removed")
+	if len(u.tooltipLayer.Objects) != 0 {
+		t.Fatal("tooltip not removed from tooltipLayer")
 	}
 
 	// MouseOut must clear a pending timer so a late show cannot appear.
 	btn.MouseIn(&desktop.MouseEvent{})
 	btn.MouseOut()
 	time.Sleep(600 * time.Millisecond)
-	if u.w.Canvas().Overlays().Top() != nil {
+	if len(u.tooltipLayer.Objects) != 0 {
 		t.Fatal("tooltip appeared after MouseOut")
 	}
 }
+
 
 func TestCardHoverChangesBorder(t *testing.T) {
 	u := newLoadedApp(t, 2)
@@ -217,3 +221,38 @@ func TestUnloadResetsState(t *testing.T) {
 	}
 	u.unload() // idempotent no-op
 }
+
+func TestExportButtonHitTest(t *testing.T) {
+	u := newLoadedApp(t, 5)
+	u.w.Resize(fyne.NewSize(800, 600))
+	u.onCardTap(0, false) // enables exportBtn
+	t.Logf("exportBtn pos=%v size=%v disabled=%v", u.exportBtn.Position(), u.exportBtn.Size(), u.exportBtn.Disabled())
+
+	u.exportBtn.showTip(fyne.NewPos(770, 20))
+
+	c := u.w.Canvas()
+	btnPos := fyne.CurrentApp().Driver().AbsolutePositionForObject(u.exportBtn)
+	btnSize := u.exportBtn.Size()
+	t.Logf("exportBtn absolute pos=%v size=%v", btnPos, btnSize)
+
+	misses := 0
+	hits := 0
+	// Sample across the entire button area
+	for x := btnPos.X + 2; x < btnPos.X+btnSize.Width-2; x += 4 {
+		for y := btnPos.Y + 2; y < btnPos.Y+btnSize.Height-2; y += 4 {
+			clicked := false
+			u.exportBtn.OnTapped = func() { clicked = true }
+			test.TapCanvas(c, fyne.NewPos(x, y))
+			if clicked {
+				hits++
+			} else {
+				misses++
+			}
+		}
+	}
+	t.Logf("Export button WITH TOOLTIP hits: %d, misses: %d (total: %d)", hits, misses, hits+misses)
+	if misses > 0 || hits == 0 {
+		t.Fatalf("Expected 100%% hits on export button, got hits=%d misses=%d", hits, misses)
+	}
+}
+

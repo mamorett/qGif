@@ -65,8 +65,10 @@ type App struct {
 	exportItem      *fyne.MenuItem
 	exportOtherItem *fyne.MenuItem
 	fileMenu        *fyne.Menu
+	tooltipLayer    *fyne.Container
 
 	loading bool
+
 
 	frames      []gifdec.Frame
 	thumbImgs   []*image.RGBA
@@ -89,6 +91,7 @@ func New(a fyne.App, w fyne.Window) *App {
 	a.Settings().SetTheme(NewQgifTheme())
 
 	u := &App{a: a, w: w, current: -1, lastTapIndex: -1}
+	u.tooltipLayer = container.NewWithoutLayout()
 
 	u.preview = NewPreview()
 
@@ -102,7 +105,7 @@ func New(a fyne.App, w fyne.Window) *App {
 	u.grid.Hide()
 
 	dz := NewDropZone("DRAG & DROP A GIF HERE — or click Open (Ctrl/⌘+O)")
-	openBig := newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w)
+	openBig := newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w, u.tooltipLayer)
 	openBig.Importance = widget.HighImportance
 	u.empty = container.NewCenter(container.NewVBox(
 		container.NewCenter(dz),
@@ -118,7 +121,7 @@ func New(a fyne.App, w fyne.Window) *App {
 	u.statusDot.Resize(fyne.NewSize(8, 8))
 	u.statusDot.Hide()
 
-	aboutBtn := newHoverButton(theme.InfoIcon(), "About qGif", u.about, w)
+	aboutBtn := newHoverButton(theme.InfoIcon(), "About qGif", u.about, w, u.tooltipLayer)
 	version := widget.NewLabel("v" + Version)
 	version.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -131,14 +134,14 @@ func New(a fyne.App, w fyne.Window) *App {
 	logo := widget.NewIcon(fyne.NewStaticResource("logo.png", logoBytes))
 	title := widget.NewLabelWithStyle("qGif", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
-	u.openBtn = newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w)
-	u.cleanBtn = newHoverButton(theme.DeleteIcon(), "Unload the current GIF (Ctrl/⌘+Shift+W)", u.unload, w)
+	u.openBtn = newHoverButton(theme.FolderOpenIcon(), "Open a GIF (Ctrl/⌘+O)", u.openDialog, w, u.tooltipLayer)
+	u.cleanBtn = newHoverButton(theme.DeleteIcon(), "Unload the current GIF (Ctrl/⌘+Shift+W)", u.unload, w, u.tooltipLayer)
 	u.cleanBtn.Disable()
-	u.allBtn = newHoverButton(theme.CheckButtonCheckedIcon(), "Select all frames (Ctrl/⌘+A)", u.selectAll, w)
-	noneBtn := newHoverButton(theme.CheckButtonIcon(), "Clear selection (Ctrl/⌘+Shift+A)", u.selectNone, w)
-	invertBtn := newHoverButton(theme.ViewRefreshIcon(), "Invert selection (Ctrl/⌘+I)", u.invert, w)
-	u.exportBtn = newHoverButton(theme.DocumentSaveIcon(),
-		"Save selected frames — or the viewed frame — as PNGs into the GIF's folder (Ctrl/⌘+E)", u.exportFlow, w)
+	u.allBtn = newHoverButton(theme.CheckButtonCheckedIcon(), "Select all frames (Ctrl/⌘+A)", u.selectAll, w, u.tooltipLayer)
+	noneBtn := newHoverButton(theme.CheckButtonIcon(), "Clear selection (Ctrl/⌘+Shift+A)", u.selectNone, w, u.tooltipLayer)
+	invertBtn := newHoverButton(theme.ViewRefreshIcon(), "Invert selection (Ctrl/⌘+I)", u.invert, w, u.tooltipLayer)
+	u.exportBtn = newHoverButtonWithText("Save", theme.DocumentSaveIcon(),
+		"Save selected frames — or the viewed frame — as PNGs into the GIF's folder (Ctrl/⌘+E)", u.exportFlow, w, u.tooltipLayer)
 	u.exportBtn.Importance = widget.HighImportance
 	u.exportBtn.Disable()
 
@@ -161,7 +164,9 @@ func New(a fyne.App, w fyne.Window) *App {
 		nil, nil,
 		container.NewPadded(u.split),
 	)
-	w.SetContent(content)
+	root := container.NewStack(content, u.tooltipLayer)
+	w.SetContent(root)
+
 
 	u.buildMenus()
 
