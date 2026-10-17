@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -152,7 +153,12 @@ func TestSanitise(t *testing.T) {
 }
 
 func TestRunUnwritableDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: chmod does not make directory unwritable")
+	}
+
 	dir := t.TempDir()
+
 	ro := filepath.Join(dir, "readonly")
 	if err := os.Mkdir(ro, 0o500); err != nil {
 		t.Fatal(err)
