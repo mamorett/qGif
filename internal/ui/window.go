@@ -52,7 +52,7 @@ type App struct {
 	grid      *widget.GridWrap
 	left      *fyne.Container
 	empty     *fyne.Container
-	status    *widget.Label
+	status    *widget.RichText
 	statusDot *canvas.Circle
 	split     *container.Split
 	preview   *Preview
@@ -115,10 +115,17 @@ func New(a fyne.App, w fyne.Window) *App {
 
 	// Status (goKomfy style: dot + monospace label, right-aligned; About and
 	// italic version on the left).
-	u.status = widget.NewLabel("No GIF loaded")
-	u.status.TextStyle = fyne.TextStyle{Monospace: true}
+	u.status = widget.NewRichText()
+	u.status.Segments = []widget.RichTextSegment{
+		&widget.TextSegment{
+			Text: "No GIF loaded",
+			Style: widget.RichTextStyle{
+				TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+			},
+		},
+	}
 	u.statusDot = canvas.NewCircle(theme.Color(theme.ColorNameSuccess))
-	u.statusDot.Resize(fyne.NewSize(8, 8))
+	u.statusDot.Resize(fyne.NewSize(12, 12))
 	u.statusDot.Hide()
 
 	aboutBtn := newHoverButton(theme.InfoIcon(), "About qGif", u.about, w, u.tooltipLayer)
@@ -253,18 +260,36 @@ func (u *App) updateExportEnabled() {
 
 func (u *App) updateStatus() {
 	if u.sel == nil || len(u.frames) == 0 {
-		u.status.SetText("No GIF loaded")
+		u.status.Segments = []widget.RichTextSegment{
+			&widget.TextSegment{
+				Text: "No GIF loaded",
+				Style: widget.RichTextStyle{
+					TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+				},
+			},
+		}
+		u.status.Refresh()
 		return
 	}
 	base := fmt.Sprintf("%s · %d×%d · %d frames", u.fileName, u.info.Width, u.info.Height, len(u.frames))
+	var msg string
 	switch {
 	case u.sel.Count() > 0:
-		u.status.SetText(fmt.Sprintf("%s · Selected: %d", base, u.sel.Count()))
+		msg = fmt.Sprintf("%s · Selected: %d", base, u.sel.Count())
 	case u.current >= 0:
-		u.status.SetText(fmt.Sprintf("%s · Viewing #%04d — double-click to select", base, u.current+1))
+		msg = fmt.Sprintf("%s · Viewing #%04d — double-click to select", base, u.current+1)
 	default:
-		u.status.SetText(fmt.Sprintf("%s · Click a frame", base))
+		msg = fmt.Sprintf("%s · Click a frame", base)
 	}
+	u.status.Segments = []widget.RichTextSegment{
+		&widget.TextSegment{
+			Text: msg,
+			Style: widget.RichTextStyle{
+				TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+			},
+		},
+	}
+	u.status.Refresh()
 }
 
 // unload clears the loaded GIF and returns the app to its empty state.
@@ -280,7 +305,15 @@ func (u *App) unload() {
 	u.preview.Clear()
 	u.grid.Hide()
 	u.empty.Show()
-	u.status.SetText("No GIF loaded")
+	u.status.Segments = []widget.RichTextSegment{
+		&widget.TextSegment{
+			Text: "No GIF loaded",
+			Style: widget.RichTextStyle{
+				TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+			},
+		},
+	}
+	u.status.Refresh()
 	u.statusDot.Hide()
 	u.w.SetTitle("qGif")
 	u.cleanBtn.Disable()
@@ -611,18 +644,33 @@ func (u *App) runExport(indices []int, opts export.Options) {
 		})
 		fyne.Do(func() {
 			dlg.Hide()
-			msg := fmt.Sprintf("Exported %d frames to %s", res.Written, opts.Dir)
 			if n := len(res.Failed); n > 0 {
-				msg += fmt.Sprintf("\n%d failed:\n", n)
-				for i, err := range res.Failed {
-					if i == 5 {
-						msg += "…"
-						break
-					}
-					msg += err.Error() + "\n"
+				msg := fmt.Sprintf("✗ Export failed: %d of %d frames", n, len(indices))
+				u.status.Segments = []widget.RichTextSegment{
+					&widget.TextSegment{
+						Text: msg,
+						Style: widget.RichTextStyle{
+							ColorName: theme.ColorNameError,
+							TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+						},
+					},
 				}
+				u.status.Refresh()
+				u.setStatusDot(theme.Color(theme.ColorNameError))
+			} else {
+				msg := fmt.Sprintf("✓ Exported %d frames to %s", res.Written, opts.Dir)
+				u.status.Segments = []widget.RichTextSegment{
+					&widget.TextSegment{
+						Text: msg,
+						Style: widget.RichTextStyle{
+							ColorName: theme.ColorNameSuccess,
+							TextStyle: fyne.TextStyle{Monospace: true, Bold: true},
+						},
+					},
+				}
+				u.status.Refresh()
+				u.setStatusDot(theme.Color(theme.ColorNameSuccess))
 			}
-			dialog.ShowInformation("Export complete", strings.TrimRight(msg, "\n"), u.w)
 		})
 	}()
 }

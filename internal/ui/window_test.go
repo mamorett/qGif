@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/mamorett/qgif/internal/gifdec"
 	"github.com/mamorett/qgif/internal/selection"
@@ -213,8 +214,8 @@ func TestUnloadResetsState(t *testing.T) {
 	if u.grid.Visible() || !u.empty.Visible() {
 		t.Fatal("expected drop zone back, grid hidden")
 	}
-	if u.status.Text != "No GIF loaded" {
-		t.Fatalf("status = %q", u.status.Text)
+	if seg, ok := u.status.Segments[0].(*widget.TextSegment); !ok || seg.Text != "No GIF loaded" {
+		t.Fatalf("status = %v", u.status.Segments)
 	}
 	if !u.exportBtn.Disabled() {
 		t.Fatal("export must be disabled after unload")
